@@ -1,0 +1,1692 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>カクレオンメーカー - 擬態かくれんぼ画像ジェネレーター</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'M PLUS Rounded 1c', sans-serif;
+            background-color: #f0fdf4;
+            background-image: radial-gradient(#bbf7d0 1.5px, transparent 1.5px);
+            background-size: 24px 24px;
+            overscroll-behavior-y: contain;
+        }
+        .game-shadow {
+            box-shadow: 0 6px 0 #15803d;
+        }
+        .game-shadow:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #15803d;
+        }
+        .game-shadow-orange {
+            box-shadow: 0 6px 0 #c2410c;
+        }
+        .game-shadow-orange:active {
+            transform: translateY(4px);
+            box-shadow: 0 2px 0 #c2410c;
+        }
+        .game-shadow-blue {
+            box-shadow: 0 5px 0 #1d4ed8;
+        }
+        .game-shadow-blue:active {
+            transform: translateY(3px);
+            box-shadow: 0 2px 0 #1d4ed8;
+        }
+        .canvas-container {
+            touch-action: none; /* スマホでのペイント・ドラッグ中のスクロール防止 */
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        /* カスタムレンジスライダー */
+        input[type=range] {
+            -webkit-appearance: none;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #22c55e;
+            border: 3px solid #ffffff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+            cursor: pointer;
+            margin-top: -7px;
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 6px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 999px;
+        }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.95); opacity: 0.8; }
+            50% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.8; }
+        }
+        .animate-pulse-ring {
+            animation: pulse-ring 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="text-slate-800 min-h-screen flex flex-col">
+
+    <!-- トースト通知（alertの代替） -->
+    <div id="toast" class="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 bg-slate-900 text-white px-6 py-3 rounded-full shadow-2xl font-bold text-sm flex items-center gap-2 transition-all duration-300 opacity-0 pointer-events-none translate-y-[-20px]">
+        <i class="fa-solid fa-circle-check text-green-400 text-lg"></i>
+        <span id="toast-msg">メッセージ</span>
+    </div>
+
+    <!-- ヘッダー -->
+    <header class="bg-gradient-to-r from-emerald-500 via-green-500 to-teal-500 text-white shadow-md sticky top-0 z-30">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center gap-2 cursor-pointer" onclick="resetToEditor()">
+                <div class="bg-white text-emerald-600 w-10 h-10 rounded-2xl flex items-center justify-center text-2xl shadow-inner font-black">
+                    🦎
+                </div>
+                <div>
+                    <h1 class="text-lg sm:text-xl font-black tracking-wider leading-tight drop-shadow">カクレオンメーカー</h1>
+                    <p class="text-[10px] sm:text-xs text-emerald-100 font-bold">背景に溶け込んでSNSで出題しよう！</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button id="header-help-btn" onclick="openModal('help-modal')" class="bg-white/20 hover:bg-white/30 text-white px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1">
+                    <i class="fa-solid fa-circle-question"></i> <span class="hidden sm:inline">遊び方</span>
+                </button>
+                <button id="header-finish-btn" onclick="generateResults()" class="bg-orange-500 hover:bg-orange-400 text-white px-4 py-2 rounded-xl text-xs sm:text-sm font-black game-shadow-orange transition flex items-center gap-1.5">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> 完成＆出題する！
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- ========================================== -->
+    <!-- 1. メインエディタ画面                      -->
+    <!-- ========================================== -->
+    <main id="editor-view" class="flex-1 max-w-6xl w-full mx-auto p-3 sm:p-5 flex flex-col lg:flex-row gap-4 sm:gap-6">
+        
+        <!-- 左側：メインキャンバスエリア -->
+        <div class="flex-1 flex flex-col items-center">
+            <!-- モード切り替えタブ -->
+            <div class="w-full max-w-[600px] bg-white p-1.5 rounded-2xl shadow-sm border-2 border-emerald-200 flex gap-1.5 mb-3">
+                <button id="tab-move" onclick="setMode('move')" class="flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition bg-emerald-500 text-white shadow">
+                    <i class="fa-solid fa-arrows-up-down-left-right"></i> 1. 配置・サイズ変形
+                </button>
+                <button id="tab-paint" onclick="setMode('paint')" class="flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition text-slate-600 hover:bg-slate-100">
+                    <i class="fa-solid fa-paintbrush"></i> 2. カモフラージュ塗装
+                </button>
+            </div>
+
+            <!-- キャンバスラッパー -->
+            <div class="relative w-full max-w-[600px] aspect-[4/3] bg-slate-200 rounded-3xl overflow-hidden shadow-xl border-4 border-white canvas-container" id="canvas-wrapper">
+                <canvas id="main-canvas" class="w-full h-full block cursor-crosshair"></canvas>
+                
+                <!-- スポイト拡大ルーペ（スポイト使用時やタッチ時に表示） -->
+                <div id="eyedropper-preview" class="hidden pointer-events-none absolute top-3 right-3 bg-white/95 backdrop-blur px-3 py-2 rounded-2xl shadow-lg border-2 border-emerald-400 flex items-center gap-2 z-10">
+                    <div id="eyedropper-swatch" class="w-7 h-7 rounded-full border-2 border-slate-300 shadow-inner" style="background-color: #ffffff;"></div>
+                    <div class="text-xs font-bold text-slate-700">
+                        <div>スポイト中</div>
+                        <div id="eyedropper-hex" class="text-[10px] font-mono text-slate-500">#FFFFFF</div>
+                    </div>
+                </div>
+
+                <!-- ガイドバッジ -->
+                <div id="canvas-hint" class="pointer-events-none absolute bottom-3 left-3 bg-slate-900/75 backdrop-blur-sm text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
+                    <i class="fa-solid fa-hand-pointer text-amber-400"></i>
+                    <span id="canvas-hint-text">人形をドラッグして隠れる場所を決めよう！</span>
+                </div>
+            </div>
+
+            <!-- クイックアクションバー（キャンバス下） -->
+            <div class="w-full max-w-[600px] mt-3 flex flex-wrap items-center justify-between gap-2 bg-white px-4 py-2.5 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex items-center gap-2">
+                    <button onclick="undoPaint()" id="btn-undo" class="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition disabled:opacity-40">
+                        <i class="fa-solid fa-rotate-left"></i> 1つ戻る
+                    </button>
+                    <button onclick="clearDollPaint()" class="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
+                        <i class="fa-solid fa-eraser"></i> 白に戻す
+                    </button>
+                </div>
+                <label class="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer select-none">
+                    <input type="checkbox" id="toggle-outline" checked onchange="renderMainCanvas()" class="w-4 h-4 accent-emerald-500 rounded">
+                    <span>輪郭ガイド表示</span>
+                </label>
+            </div>
+        </div>
+
+        <!-- 右側：コントロールパネル -->
+        <div class="w-full lg:w-[380px] flex flex-col gap-4">
+            
+            <!-- ステージ背景選択カード -->
+            <div class="bg-white p-4 rounded-3xl shadow-sm border-2 border-slate-100">
+                <h2 class="text-sm font-black text-slate-700 flex items-center gap-2 mb-3">
+                    <span class="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-lg flex items-center justify-center text-xs"><i class="fa-solid fa-image"></i></span>
+                    ステージ背景を選ぶ
+                </h2>
+                <div class="grid grid-cols-4 gap-2 mb-3">
+                    <button onclick="selectPresetBg('toys')" id="bg-btn-toys" class="bg-preset-btn ring-2 ring-emerald-500 bg-amber-50 hover:bg-amber-100 p-2 rounded-xl flex flex-col items-center gap-1 transition">
+                        <span class="text-xl">🧸</span>
+                        <span class="text-[10px] font-bold text-slate-700">おもちゃ箱</span>
+                    </button>
+                    <button onclick="selectPresetBg('town')" id="bg-btn-town" class="bg-preset-btn bg-sky-50 hover:bg-sky-100 p-2 rounded-xl flex flex-col items-center gap-1 transition">
+                        <span class="text-xl">🏘️</span>
+                        <span class="text-[10px] font-bold text-slate-700">カラフル街</span>
+                    </button>
+                    <button onclick="selectPresetBg('forest')" id="bg-btn-forest" class="bg-preset-btn bg-green-50 hover:bg-green-100 p-2 rounded-xl flex flex-col items-center gap-1 transition">
+                        <span class="text-xl">🌲</span>
+                        <span class="text-[10px] font-bold text-slate-700">深い森</span>
+                    </button>
+                    <button onclick="selectPresetBg('geo')" id="bg-btn-geo" class="bg-preset-btn bg-purple-50 hover:bg-purple-100 p-2 rounded-xl flex flex-col items-center gap-1 transition">
+                        <span class="text-xl">🔷</span>
+                        <span class="text-[10px] font-bold text-slate-700">幾何学模様</span>
+                    </button>
+                </div>
+                <label class="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-black flex items-center justify-center gap-2 cursor-pointer transition border border-dashed border-slate-300">
+                    <i class="fa-solid fa-upload text-emerald-600"></i> 自分の写真・画像をアップロード
+                    <input type="file" id="bg-upload" accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                </label>
+            </div>
+
+            <!-- モード別ツールパネル：1. 配置・変形 -->
+            <div id="panel-move" class="bg-white p-4 rounded-3xl shadow-sm border-2 border-emerald-200 flex flex-col gap-4">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-black text-emerald-700 flex items-center gap-2">
+                        <span class="bg-emerald-100 text-emerald-700 w-6 h-6 rounded-lg flex items-center justify-center text-xs"><i class="fa-solid fa-person"></i></span>
+                        人形のポーズ・サイズ調整
+                    </h2>
+                    <button onclick="resetDollTransform()" class="text-xs font-bold text-slate-400 hover:text-slate-600 underline">リセット</button>
+                </div>
+
+                <!-- ポーズ選択 -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-500 mb-1.5">ポーズ</label>
+                    <div class="grid grid-cols-3 gap-2">
+                        <button onclick="setDollPose('stand')" id="pose-stand" class="pose-btn bg-emerald-500 text-white py-2 rounded-xl text-xs font-bold shadow-sm transition">🧍 バンザイ</button>
+                        <button onclick="setDollPose('ninja')" id="pose-ninja" class="pose-btn bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold transition">🥷 忍び足</button>
+                        <button onclick="setDollPose('star')" id="pose-star" class="pose-btn bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold transition">⭐ 大の字</button>
+                    </div>
+                </div>
+
+                <!-- 大きさスライダー -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                        <span>大きさ（スケール）</span>
+                        <span id="val-scale" class="text-emerald-600 font-mono">100%</span>
+                    </div>
+                    <input type="range" id="slider-scale" min="0.3" max="2.2" step="0.05" value="1.0" oninput="updateTransformFromSliders()" class="w-full">
+                </div>
+
+                <!-- 回転スライダー -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                        <span>回転角度</span>
+                        <span id="val-angle" class="text-emerald-600 font-mono">0°</span>
+                    </div>
+                    <input type="range" id="slider-angle" min="-180" max="180" step="1" value="0" oninput="updateTransformFromSliders()" class="w-full">
+                </div>
+
+                <button onclick="setMode('paint')" class="w-full py-3 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-black text-sm game-shadow transition flex items-center justify-center gap-2 mt-1">
+                    次へ：色を塗って隠す <i class="fa-solid fa-arrow-right"></i>
+                </button>
+            </div>
+
+            <!-- モード別ツールパネル：2. ペイント（カモフラージュ） -->
+            <div id="panel-paint" class="hidden bg-white p-4 rounded-3xl shadow-sm border-2 border-amber-300 flex flex-col gap-3.5">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-black text-amber-700 flex items-center gap-2">
+                        <span class="bg-amber-100 text-amber-700 w-6 h-6 rounded-lg flex items-center justify-center text-xs"><i class="fa-solid fa-palette"></i></span>
+                        カモフラージュ塗装ツール
+                    </h2>
+                    <span class="text-[10px] bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-bold">はみ出し防止ON</span>
+                </div>
+
+                <!-- ツール選択（ブラシ / スポイト / 消しゴム） -->
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="setBrushTool('brush')" id="tool-brush" class="brush-tool-btn bg-amber-500 text-white py-2.5 px-2 rounded-xl text-xs font-black shadow flex flex-col items-center gap-1 transition">
+                        <i class="fa-solid fa-paintbrush text-base"></i>
+                        <span>ブラシ</span>
+                    </button>
+                    <button onclick="setBrushTool('eyedropper')" id="tool-eyedropper" class="brush-tool-btn bg-slate-100 hover:bg-sky-50 text-slate-700 py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center gap-1 transition border border-slate-200">
+                        <i class="fa-solid fa-eye-dropper text-base text-sky-600"></i>
+                        <span>色スポイト</span>
+                    </button>
+                    <button onclick="setBrushTool('eraser')" id="tool-eraser" class="brush-tool-btn bg-slate-100 hover:bg-rose-50 text-slate-700 py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center gap-1 transition border border-slate-200">
+                        <i class="fa-solid fa-eraser text-base text-rose-500"></i>
+                        <span>白消しゴム</span>
+                    </button>
+                </div>
+
+                <!-- 現在の色＆カラーパレット -->
+                <div class="bg-slate-50 p-3 rounded-2xl border border-slate-200">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-xs font-bold text-slate-600">現在のインク色</span>
+                        <div class="flex items-center gap-2">
+                            <input type="color" id="color-picker" value="#22c55e" onchange="setBrushColor(this.value)" class="w-8 h-8 rounded-lg cursor-pointer border-0 bg-transparent">
+                            <span id="current-color-hex" class="text-xs font-mono font-bold text-slate-600">#22C55E</span>
+                        </div>
+                    </div>
+                    <!-- 最近スポイトした色・おすすめパレット -->
+                    <div class="flex items-center gap-1.5 flex-wrap" id="recent-colors">
+                        <!-- JSで動的生成 -->
+                    </div>
+                </div>
+
+                <!-- ブラシサイズ -->
+                <div>
+                    <div class="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                        <span>ブラシ太さ</span>
+                        <span id="val-brush-size" class="text-amber-600 font-mono">18px</span>
+                    </div>
+                    <input type="range" id="slider-brush-size" min="3" max="60" value="18" oninput="updateBrushSettings()" class="w-full">
+                </div>
+
+                <!-- 不透明度 & ぼかし -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <div class="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                            <span>濃さ(不透明度)</span>
+                            <span id="val-brush-alpha" class="text-amber-600 font-mono">100%</span>
+                        </div>
+                        <input type="range" id="slider-brush-alpha" min="10" max="100" value="100" oninput="updateBrushSettings()" class="w-full">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs font-bold text-slate-600 mb-1">
+                            <span>ぼかし(馴染み)</span>
+                            <span id="val-brush-blur" class="text-amber-600 font-mono">2px</span>
+                        </div>
+                        <input type="range" id="slider-brush-blur" min="0" max="20" value="2" oninput="updateBrushSettings()" class="w-full">
+                    </div>
+                </div>
+
+                <button onclick="generateResults()" class="w-full py-3 bg-orange-500 hover:bg-orange-400 text-white rounded-2xl font-black text-sm game-shadow-orange transition flex items-center justify-center gap-2 mt-1">
+                    <i class="fa-solid fa-check-circle"></i> 完成！問題と答えを作る
+                </button>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- ========================================== -->
+    <!-- 2. 完成＆共有モーダル画面                  -->
+    <!-- ========================================== -->
+    <div id="result-view" class="hidden flex-1 max-w-4xl w-full mx-auto p-3 sm:p-6 flex flex-col gap-5">
+        <div class="bg-white rounded-3xl p-4 sm:p-6 shadow-xl border-2 border-emerald-200">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                <div>
+                    <span class="bg-orange-100 text-orange-700 text-xs font-black px-3 py-1 rounded-full">完成しました！</span>
+                    <h2 class="text-xl sm:text-2xl font-black text-slate-800 mt-1">SNSでみんなに出題しよう！</h2>
+                </div>
+                <button onclick="backToEditor()" class="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition">
+                    <i class="fa-solid fa-pen"></i> 手直しする
+                </button>
+            </div>
+
+            <!-- 問題画像 / 答え画像 切り替えタブ -->
+            <div class="flex gap-2 mb-4 bg-slate-100 p-1.5 rounded-2xl">
+                <button id="res-tab-question" onclick="switchResultTab('question')" class="flex-1 py-2.5 rounded-xl font-black text-xs sm:text-sm bg-emerald-500 text-white shadow transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-eye-slash"></i> ① 問題画像（出題用）
+                </button>
+                <button id="res-tab-answer" onclick="switchResultTab('answer')" class="flex-1 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-600 hover:bg-white/60 transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-bullseye text-rose-500"></i> ② 答え画像（ネタバラシ）
+                </button>
+            </div>
+
+            <!-- 画像オプション（フレーム有無） -->
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-3 px-1">
+                <label class="flex items-center gap-2 text-xs sm:text-sm font-bold text-slate-700 cursor-pointer">
+                    <input type="checkbox" id="opt-frame" checked onchange="regenerateResultImages()" class="w-4 h-4 accent-emerald-500 rounded">
+                    <span>「隠れたカメレオンを探せ！」フレーム枠をつける</span>
+                </label>
+                <span class="text-xs text-slate-400 font-bold">※画像は長押しでも保存できます</span>
+            </div>
+
+            <!-- 生成画像プレビュー表示エリア -->
+            <div class="relative w-full max-w-[600px] mx-auto rounded-2xl overflow-hidden shadow-lg border-4 border-slate-100 bg-slate-900">
+                <img id="result-preview-img" src="" alt="生成結果" class="w-full h-auto block">
+            </div>
+
+            <!-- 画像保存・コピーボタン -->
+            <div class="grid grid-cols-2 gap-3 max-w-[600px] mx-auto mt-4">
+                <button onclick="downloadCurrentResultImage()" class="py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-white rounded-2xl font-black text-xs sm:text-sm game-shadow transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-download"></i> この画像を保存
+                </button>
+                <button onclick="copyCurrentResultImage()" class="py-3 px-4 bg-sky-500 hover:bg-sky-400 text-white rounded-2xl font-black text-xs sm:text-sm game-shadow-blue transition flex items-center justify-center gap-2">
+                    <i class="fa-regular fa-copy"></i> 画像をコピー
+                </button>
+            </div>
+
+            <!-- X (Twitter) 共有 & 「答えはこちら」リンクエリア -->
+            <div class="mt-6 pt-6 border-t-2 border-dashed border-slate-200 flex flex-col gap-4">
+                <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+                    <h3 class="text-sm font-black text-slate-800 flex items-center gap-2 mb-2">
+                        <i class="fa-brands fa-x-twitter text-lg"></i> X（Twitter）に投稿する手順
+                    </h3>
+                    <ol class="text-xs text-slate-600 space-y-1.5 list-decimal list-inside font-bold mb-3">
+                        <li>上の<span class="text-emerald-600">「この画像を保存」</span>または<span class="text-sky-600">「画像をコピー」</span>を押します。</li>
+                        <li>下のボタンからXを開き、保存した画像（またはCtrl+Vで貼り付け）を添付してポスト！</li>
+                        <li>リプライ欄に「② 答え画像」や下の「答え専用リンク」を貼ると盛り上がります！</li>
+                    </ol>
+                    <button onclick="shareToTwitter()" class="w-full py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-sm shadow-lg transition flex items-center justify-center gap-2">
+                        <i class="fa-brands fa-x-twitter text-lg"></i> X（Twitter）で出題ポストを作成
+                    </button>
+                </div>
+
+                <!-- 「答えはこちら」専用リンク生成ボックス -->
+                <div class="bg-amber-50 p-4 rounded-2xl border border-amber-200">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <h3 class="text-sm font-black text-amber-900 flex items-center gap-1.5">
+                            <i class="fa-solid fa-link text-amber-600"></i> 「答えはこちら」スポットライトURL
+                        </h3>
+                        <span id="url-status-badge" class="text-[10px] bg-amber-200 text-amber-900 px-2 py-0.5 rounded-full font-bold">URL発行済</span>
+                    </div>
+                    <p class="text-xs text-amber-800 mb-2.5 leading-relaxed">
+                        このリンクを開くと、最初は隠れた状態で表示され、ボタンを押すとスポットライトで正解が浮かび上がる演出ページが開きます！
+                    </p>
+                    <div class="flex gap-2">
+                        <input type="text" id="answer-share-url" readonly class="flex-1 bg-white border border-amber-300 rounded-xl px-3 py-2 text-xs font-mono text-slate-600 select-all">
+                        <button onclick="copyAnswerUrl()" class="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white rounded-xl font-black text-xs whitespace-nowrap shadow transition">
+                            URLコピー
+                        </button>
+                    </div>
+                    <div class="mt-2 text-right">
+                        <button onclick="previewAnswerRevealPage()" class="text-xs font-black text-amber-700 hover:text-amber-900 underline inline-flex items-center gap-1">
+                            <i class="fa-solid fa-play"></i> 答え発表ページの動きをテストする
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- 3. 「答えはこちら」スポットライト発表モード -->
+    <!-- ========================================== -->
+    <div id="reveal-view" class="hidden flex-1 max-w-3xl w-full mx-auto p-4 flex flex-col items-center justify-center">
+        <div class="w-full bg-slate-900 text-white rounded-3xl p-4 sm:p-6 shadow-2xl border-4 border-emerald-400">
+            <div class="text-center mb-4">
+                <span class="inline-block bg-emerald-500 text-slate-950 text-xs font-black px-3 py-1 rounded-full mb-1">
+                    🦎 カクレオンメーカー 正解発表！
+                </span>
+                <h2 class="text-xl sm:text-2xl font-black tracking-wide" id="reveal-title">どこに隠れているかわかるかな？</h2>
+            </div>
+
+            <!-- スポットライト演出キャンバス -->
+            <div class="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-black shadow-inner border-2 border-slate-700">
+                <canvas id="reveal-canvas" class="w-full h-full block"></canvas>
+            </div>
+
+            <!-- 操作ボタン -->
+            <div class="mt-5 flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button id="btn-trigger-spotlight" onclick="toggleSpotlightReveal()" class="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-300 hover:to-orange-400 text-slate-950 rounded-2xl font-black text-base shadow-lg animate-pulse-ring transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-lightbulb text-xl"></i> <span id="spotlight-btn-text">スポットライトで答えを見る！</span>
+                </button>
+                <button onclick="exitRevealToCreate()" class="w-full sm:w-auto px-6 py-4 bg-slate-800 hover:bg-slate-700 text-white rounded-2xl font-bold text-sm transition flex items-center justify-center gap-2">
+                    <i class="fa-solid fa-plus"></i> 自分も問題を作る
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遊び方モーダル -->
+    <div id="help-modal" class="hidden fixed inset-0 z-50 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center p-4">
+        <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-4 border-emerald-400">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-black text-emerald-700 flex items-center gap-2">
+                    <span>🦎</span> カクレオンメーカーの遊び方
+                </h3>
+                <button onclick="closeModal('help-modal')" class="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-600 font-bold">✕</button>
+            </div>
+            <div class="space-y-3 text-xs sm:text-sm text-slate-600 font-bold leading-relaxed">
+                <div class="flex gap-3 items-start bg-emerald-50 p-3 rounded-2xl">
+                    <span class="bg-emerald-500 text-white w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-black">1</span>
+                    <p>背景イラストを選ぶか、自分の写真をアップロードします。</p>
+                </div>
+                <div class="flex gap-3 items-start bg-emerald-50 p-3 rounded-2xl">
+                    <span class="bg-emerald-500 text-white w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-black">2</span>
+                    <p>真っ白な人形をドラッグして、模様が複雑な場所や隠れやすそうな場所に配置します。</p>
+                </div>
+                <div class="flex gap-3 items-start bg-amber-50 p-3 rounded-2xl">
+                    <span class="bg-amber-500 text-white w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-black">3</span>
+                    <p><span class="text-amber-700 underline">「カモフラージュ塗装」</span>に切り替えて、<span class="text-sky-600">スポイト</span>で背景の色を吸い取りながら人形を塗ります。輪郭からはみ出さずに塗れます！</p>
+                </div>
+                <div class="flex gap-3 items-start bg-orange-50 p-3 rounded-2xl">
+                    <span class="bg-orange-500 text-white w-6 h-6 rounded-full flex items-center justify-center shrink-0 font-black">4</span>
+                    <p>「完成＆出題する」を押すと、<strong>問題画像</strong>と<strong>答え画像</strong>が自動生成！X（Twitter）に投稿して友達に見つけてもらおう！</p>
+                </div>
+            </div>
+            <button onclick="closeModal('help-modal')" class="w-full mt-5 py-3 bg-emerald-500 text-white rounded-2xl font-black text-sm game-shadow">
+                さっそく作る！
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * ============================================================================
+         * カクレオンメーカー メインロジック
+         * ============================================================================
+         */
+        const CANVAS_W = 800;
+        const CANVAS_H = 600;
+        const DOLL_TEX_SIZE = 320; // 人形ペイント用オフスクリーンキャンバスの解像度
+
+        // アプリケーション状態
+        const state = {
+            mode: 'move', // 'move' | 'paint'
+            bgType: 'toys', // 'toys' | 'town' | 'forest' | 'geo' | 'custom'
+            doll: {
+                x: CANVAS_W / 2,
+                y: CANVAS_H / 2,
+                scale: 1.0,
+                angle: 0, // ラジアン
+                pose: 'stand' // 'stand' | 'ninja' | 'star'
+            },
+            brush: {
+                tool: 'brush', // 'brush' | 'eyedropper' | 'eraser'
+                color: '#22c55e',
+                size: 18,
+                alpha: 1.0,
+                blur: 2
+            },
+            recentColors: ['#22c55e', '#ef4444', '#3b82f6', '#eab308', '#a855f7', '#ec4899', '#8b5cf6', '#14b8a6'],
+            isDragging: false,
+            dragOffset: { x: 0, y: 0 },
+            isPainting: false,
+            lastPaintPos: null,
+            undoStack: [], // ImageDataの履歴
+            resultTab: 'question', // 'question' | 'answer'
+            questionDataUrl: '',
+            answerDataUrl: '',
+            revealState: {
+                active: false,
+                spotlightRadius: 0,
+                animId: null,
+                data: null
+            }
+        };
+
+        // キャンバス群のセットアップ
+        const mainCanvas = document.getElementById('main-canvas');
+        const mainCtx = mainCanvas.getContext('2d');
+        mainCanvas.width = CANVAS_W;
+        mainCanvas.height = CANVAS_H;
+
+        // オフスクリーン1: 背景専用キャンバス
+        const bgCanvas = document.createElement('canvas');
+        bgCanvas.width = CANVAS_W;
+        bgCanvas.height = CANVAS_H;
+        const bgCtx = bgCanvas.getContext('2d');
+
+        // オフスクリーン2: 人形の塗装テクスチャキャンバス（ローカル座標系 320x320）
+        const dollCanvas = document.createElement('canvas');
+        dollCanvas.width = DOLL_TEX_SIZE;
+        dollCanvas.height = DOLL_TEX_SIZE;
+        const dollCtx = dollCanvas.getContext('2d');
+
+        // オフスクリーン3: 合成用一時キャンバス
+        const compCanvas = document.createElement('canvas');
+        compCanvas.width = CANVAS_W;
+        compCanvas.height = CANVAS_H;
+        const compCtx = compCanvas.getContext('2d');
+
+        // 初期化処理
+        window.onload = () => {
+            initDollCanvas();
+            renderRecentColors();
+            setupCanvasEvents();
+
+            // URLハッシュに「答え発表モード」のデータが含まれているかチェック
+            if (window.location.hash && window.location.hash.startsWith('#reveal=')) {
+                try {
+                    const encoded = window.location.hash.replace('#reveal=', '');
+                    const decoded = JSON.parse(decodeURIComponent(atob(encoded)));
+                    enterRevealMode(decoded);
+                    return;
+                } catch (e) {
+                    console.error('URLデータの復元に失敗しました', e);
+                }
+            }
+
+            // 通常エディタ起動
+            drawPresetBackground('toys');
+            saveUndoState();
+            renderMainCanvas();
+        };
+
+        /**
+         * 人形キャンバスの初期化（真っ白に塗りつぶす）
+         */
+        function initDollCanvas() {
+            dollCtx.clearRect(0, 0, DOLL_TEX_SIZE, DOLL_TEX_SIZE);
+            dollCtx.fillStyle = '#ffffff';
+            dollCtx.fillRect(0, 0, DOLL_TEX_SIZE, DOLL_TEX_SIZE);
+        }
+
+        /**
+         * 人形のシルエットパスをContextに定義する（中心を (0,0) とするローカル座標）
+         * 可愛い丸みのある人型シルエット
+         */
+        function traceDollPath(ctx, pose = state.doll.pose) {
+            ctx.beginPath();
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+
+            // 頭部（共通）
+            ctx.arc(0, -68, 22, 0, Math.PI * 2);
+
+            if (pose === 'stand') {
+                // バンザイポーズ（胴体＋両腕上げ＋両足開き）
+                // 胴体
+                ctx.moveTo(-16, -42);
+                ctx.quadraticCurveTo(-20, -5, -16, 20);
+                ctx.lineTo(16, 20);
+                ctx.quadraticCurveTo(20, -5, 16, -42);
+                ctx.closePath();
+
+                // 左腕（上げ）
+                ctx.moveTo(-15, -36);
+                ctx.quadraticCurveTo(-45, -55, -52, -82);
+                ctx.arc(-47, -84, 7, Math.PI, 0, false);
+                ctx.quadraticCurveTo(-36, -50, -14, -22);
+
+                // 右腕（上げ）
+                ctx.moveTo(15, -36);
+                ctx.quadraticCurveTo(45, -55, 52, -82);
+                ctx.arc(47, -84, 7, 0, Math.PI, true);
+                ctx.quadraticCurveTo(36, -50, 14, -22);
+
+                // 左足
+                ctx.moveTo(-15, 16);
+                ctx.lineTo(-26, 84);
+                ctx.arc(-18, 84, 8, Math.PI, 0, true);
+                ctx.lineTo(-4, 20);
+
+                // 右足
+                ctx.moveTo(15, 16);
+                ctx.lineTo(26, 84);
+                ctx.arc(18, 84, 8, 0, Math.PI, false);
+                ctx.lineTo(4, 20);
+
+            } else if (pose === 'ninja') {
+                // 忍び足・ひょっこりポーズ
+                ctx.moveTo(-15, -42);
+                ctx.quadraticCurveTo(-22, -10, -14, 18);
+                ctx.lineTo(16, 18);
+                ctx.quadraticCurveTo(20, -10, 15, -42);
+                ctx.closePath();
+
+                // 左腕（前に構える）
+                ctx.moveTo(-14, -36);
+                ctx.lineTo(-48, -28);
+                ctx.arc(-48, -21, 7, -Math.PI/2, Math.PI/2, true);
+                ctx.lineTo(-14, -20);
+
+                // 右腕（後ろに引く）
+                ctx.moveTo(14, -36);
+                ctx.lineTo(46, -48);
+                ctx.arc(48, -41, 7, -Math.PI/2, Math.PI/2, false);
+                ctx.lineTo(14, -20);
+
+                // 左足（曲げ）
+                ctx.moveTo(-14, 15);
+                ctx.lineTo(-38, 45);
+                ctx.lineTo(-26, 82);
+                ctx.arc(-19, 80, 7, Math.PI, 0, true);
+                ctx.lineTo(-24, 46);
+                ctx.lineTo(-3, 18);
+
+                // 右足（後ろへ伸ばす）
+                ctx.moveTo(14, 15);
+                ctx.lineTo(44, 68);
+                ctx.arc(37, 72, 7, 0, Math.PI, false);
+                ctx.lineTo(4, 18);
+
+            } else if (pose === 'star') {
+                // 大の字ジャンプポーズ
+                ctx.moveTo(-17, -42);
+                ctx.lineTo(-17, 16);
+                ctx.lineTo(17, 16);
+                ctx.lineTo(17, -42);
+                ctx.closePath();
+
+                // 左腕（真横より少し上）
+                ctx.moveTo(-16, -38);
+                ctx.lineTo(-64, -52);
+                ctx.arc(-62, -45, 7, -Math.PI/2, Math.PI/2, true);
+                ctx.lineTo(-16, -24);
+
+                // 右腕
+                ctx.moveTo(16, -38);
+                ctx.lineTo(64, -52);
+                ctx.arc(62, -45, 7, -Math.PI/2, Math.PI/2, false);
+                ctx.lineTo(16, -24);
+
+                // 左足（大きく開く）
+                ctx.moveTo(-16, 14);
+                ctx.lineTo(-48, 76);
+                ctx.arc(-41, 80, 8, Math.PI, 0, true);
+                ctx.lineTo(-3, 16);
+
+                // 右足
+                ctx.moveTo(16, 14);
+                ctx.lineTo(48, 76);
+                ctx.arc(41, 80, 8, 0, Math.PI, false);
+                ctx.lineTo(3, 16);
+            }
+        }
+
+        /**
+         * ============================================================================
+         * プリセット高密度イラスト背景の描画エンジン
+         * ============================================================================
+         */
+        function drawPresetBackground(type) {
+            state.bgType = type;
+            bgCtx.save();
+            bgCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+            // 決定論的擬似乱数生成器（URL共有時に同じ背景を再描画できるように固定シードを使用）
+            let seed = 12345;
+            function rand() {
+                seed = (seed * 16807) % 2147483647;
+                return (seed - 1) / 2147483646;
+            }
+
+            if (type === 'toys') {
+                // 1. カラフルなおもちゃ箱（高密度ポップイラスト）
+                bgCtx.fillStyle = '#fef3c7';
+                bgCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+                const colors = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#a855f7', '#ec4899', '#06b6d4', '#f97316'];
+                
+                for (let i = 0; i < 160; i++) {
+                    const x = rand() * CANVAS_W;
+                    const y = rand() * CANVAS_H;
+                    const size = 22 + rand() * 48;
+                    const rot = rand() * Math.PI * 2;
+                    const col = colors[Math.floor(rand() * colors.length)];
+                    const shapeType = Math.floor(rand() * 5);
+
+                    bgCtx.save();
+                    bgCtx.translate(x, y);
+                    bgCtx.rotate(rot);
+                    bgCtx.fillStyle = col;
+                    bgCtx.strokeStyle = '#ffffff';
+                    bgCtx.lineWidth = 3;
+
+                    if (shapeType === 0) {
+                        // 積み木ブロック
+                        bgCtx.fillRect(-size/2, -size/2, size, size);
+                        bgCtx.strokeRect(-size/2, -size/2, size, size);
+                        bgCtx.fillStyle = 'rgba(255,255,255,0.4)';
+                        bgCtx.beginPath();
+                        bgCtx.arc(0, 0, size*0.25, 0, Math.PI*2);
+                        bgCtx.fill();
+                    } else if (shapeType === 1) {
+                        // 星型
+                        drawStar(bgCtx, 0, 0, 5, size*0.6, size*0.28);
+                        bgCtx.fill();
+                        bgCtx.stroke();
+                    } else if (shapeType === 2) {
+                        // カプセル・ボール
+                        bgCtx.beginPath();
+                        bgCtx.arc(0, 0, size*0.45, 0, Math.PI*2);
+                        bgCtx.fill();
+                        bgCtx.stroke();
+                        bgCtx.fillStyle = '#ffffff';
+                        bgCtx.beginPath();
+                        bgCtx.arc(-size*0.15, -size*0.15, size*0.12, 0, Math.PI*2);
+                        bgCtx.fill();
+                    } else if (shapeType === 3) {
+                        // 三角フラッグ
+                        bgCtx.beginPath();
+                        bgCtx.moveTo(0, -size*0.5);
+                        bgCtx.lineTo(size*0.5, size*0.4);
+                        bgCtx.lineTo(-size*0.5, size*0.4);
+                        bgCtx.closePath();
+                        bgCtx.fill();
+                        bgCtx.stroke();
+                    } else {
+                        // ドーナツリング
+                        bgCtx.beginPath();
+                        bgCtx.arc(0, 0, size*0.45, 0, Math.PI*2);
+                        bgCtx.lineWidth = 8;
+                        bgCtx.strokeStyle = col;
+                        bgCtx.stroke();
+                    }
+                    bgCtx.restore();
+                }
+
+            } else if (type === 'town') {
+                // 2. 複雑な街並み（ヨーロッパ風カラフルタウン）
+                const skyGrad = bgCtx.createLinearGradient(0, 0, 0, CANVAS_H);
+                skyGrad.addColorStop(0, '#38bdf8');
+                skyGrad.addColorStop(1, '#bae6fd');
+                bgCtx.fillStyle = skyGrad;
+                bgCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+                // 雲
+                bgCtx.fillStyle = 'rgba(255,255,255,0.85)';
+                for (let c = 0; c < 12; c++) {
+                    const cx = rand() * CANVAS_W;
+                    const cy = 20 + rand() * 140;
+                    bgCtx.beginPath();
+                    bgCtx.arc(cx, cy, 25, 0, Math.PI*2);
+                    bgCtx.arc(cx+22, cy-5, 30, 0, Math.PI*2);
+                    bgCtx.arc(cx+45, cy, 22, 0, Math.PI*2);
+                    bgCtx.fill();
+                }
+
+                const wallColors = ['#fecaca', '#fed7aa', '#fef08a', '#bbf7d0', '#bfdbfe', '#ddd6fe', '#fbcfe8', '#ffffff'];
+                const roofColors = ['#dc2626', '#ea580c', '#2563eb', '#059669', '#7c3aed', '#be185d'];
+
+                // 奥から手前へ6列の建物を密集配置
+                for (let row = 0; row < 6; row++) {
+                    const baseY = 160 + row * 85;
+                    let curX = -30 + (row % 2) * 25;
+                    while (curX < CANVAS_W + 40) {
+                        const w = 55 + rand() * 55;
+                        const h = 75 + rand() * 65;
+                        const wallCol = wallColors[Math.floor(rand() * wallColors.length)];
+                        const roofCol = roofColors[Math.floor(rand() * roofColors.length)];
+
+                        // 建物本体
+                        bgCtx.fillStyle = wallCol;
+                        bgCtx.strokeStyle = '#334155';
+                        bgCtx.lineWidth = 2;
+                        bgCtx.fillRect(curX, baseY - h, w, h);
+                        bgCtx.strokeRect(curX, baseY - h, w, h);
+
+                        // 屋根
+                        bgCtx.fillStyle = roofCol;
+                        bgCtx.beginPath();
+                        bgCtx.moveTo(curX - 6, baseY - h);
+                        bgCtx.lineTo(curX + w / 2, baseY - h - (22 + rand()*18));
+                        bgCtx.lineTo(curX + w + 6, baseY - h);
+                        bgCtx.closePath();
+                        bgCtx.fill();
+                        bgCtx.stroke();
+
+                        // 窓をたくさん描く
+                        const cols = Math.floor(w / 18);
+                        const rows = Math.floor(h / 22);
+                        for (let wy = 0; wy < rows; wy++) {
+                            for (let wx = 0; wx < cols; wx++) {
+                                bgCtx.fillStyle = rand() > 0.3 ? '#fef08a' : '#334155';
+                                bgCtx.fillRect(curX + 8 + wx * 16, baseY - h + 10 + wy * 18, 9, 12);
+                            }
+                        }
+                        curX += w - 4;
+                    }
+                }
+
+            } else if (type === 'forest') {
+                // 3. 深い森の中（重なり合う葉っぱ・木の実・花）
+                bgCtx.fillStyle = '#064e3b';
+                bgCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+
+                // 木の幹
+                for (let t = 0; t < 18; t++) {
+                    const tx = rand() * CANVAS_W;
+                    const tw = 18 + rand() * 26;
+                    bgCtx.fillStyle = rand() > 0.5 ? '#451a03' : '#78350f';
+                    bgCtx.fillRect(tx, 0, tw, CANVAS_H);
+                }
+
+                // 無数の葉っぱと木の実
+                const leafColors = ['#15803d', '#16a34a', '#22c55e', '#4ade80', '#84cc16', '#047857', '#a3e635'];
+                for (let i = 0; i < 380; i++) {
+                    const lx = rand() * CANVAS_W;
+                    const ly = rand() * CANVAS_H;
+                    const r = 14 + rand() * 28;
+                    bgCtx.save();
+                    bgCtx.translate(lx, ly);
+                    bgCtx.rotate(rand() * Math.PI * 2);
+                    bgCtx.fillStyle = leafColors[Math.floor(rand() * leafColors.length)];
+                    bgCtx.beginPath();
+                    bgCtx.ellipse(0, 0, r, r * 0.55, 0, 0, Math.PI * 2);
+                    bgCtx.fill();
+                    bgCtx.strokeStyle = 'rgba(0,0,0,0.18)';
+                    bgCtx.lineWidth = 1.5;
+                    bgCtx.stroke();
+                    bgCtx.restore();
+
+                    // たまに木の実や花を混ぜる
+                    if (i % 9 === 0) {
+                        bgCtx.fillStyle = rand() > 0.5 ? '#f43f5e' : '#facc15';
+                        bgCtx.beginPath();
+                        bgCtx.arc(lx, ly, 5 + rand() * 4, 0, Math.PI * 2);
+                        bgCtx.fill();
+                    }
+                }
+
+            } else if (type === 'geo') {
+                // 4. 幾何学模様（高難易度モザイク・メンフィス柄）
+                bgCtx.fillStyle = '#1e1b4b';
+                bgCtx.fillRect(0, 0, CANVAS_W, CANVAS_H);
+                const geoColors = ['#f43f5e', '#ec4899', '#8b5cf6', '#3b82f6', '#06b6d4', '#10b981', '#f59e0b', '#ffffff'];
+                const step = 40;
+                for (let y = 0; y < CANVAS_H; y += step) {
+                    for (let x = 0; x < CANVAS_W; x += step) {
+                        bgCtx.fillStyle = geoColors[Math.floor(rand() * geoColors.length)];
+                        bgCtx.fillRect(x, y, step, step);
+
+                        bgCtx.fillStyle = geoColors[Math.floor(rand() * geoColors.length)];
+                        const pat = Math.floor(rand() * 4);
+                        bgCtx.beginPath();
+                        if (pat === 0) {
+                            bgCtx.moveTo(x, y);
+                            bgCtx.lineTo(x + step, y);
+                            bgCtx.lineTo(x, y + step);
+                        } else if (pat === 1) {
+                            bgCtx.arc(x + step/2, y + step/2, step * 0.38, 0, Math.PI*2);
+                        } else if (pat === 2) {
+                            bgCtx.moveTo(x + step, y);
+                            bgCtx.lineTo(x + step, y + step);
+                            bgCtx.lineTo(x, y + step);
+                        } else {
+                            bgCtx.rect(x + 8, y + 8, step - 16, step - 16);
+                        }
+                        bgCtx.fill();
+                    }
+                }
+            }
+            bgCtx.restore();
+        }
+
+        function drawStar(ctx, cx, cy, spikes, outerRadius, innerRadius) {
+            let rot = Math.PI / 2 * 3;
+            let x = cx;
+            let y = cy;
+            const step = Math.PI / spikes;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - outerRadius);
+            for (let i = 0; i < spikes; i++) {
+                x = cx + Math.cos(rot) * outerRadius;
+                y = cy + Math.sin(rot) * outerRadius;
+                ctx.lineTo(x, y);
+                rot += step;
+                x = cx + Math.cos(rot) * innerRadius;
+                y = cy + Math.sin(rot) * innerRadius;
+                ctx.lineTo(x, y);
+                rot += step;
+            }
+            ctx.lineTo(cx, cy - outerRadius);
+            ctx.closePath();
+        }
+
+        /**
+         * プリセット背景ボタンの選択
+         */
+        function selectPresetBg(type) {
+            document.querySelectorAll('.bg-preset-btn').forEach(btn => {
+                btn.classList.remove('ring-2', 'ring-emerald-500');
+            });
+            const activeBtn = document.getElementById(`bg-btn-${type}`);
+            if (activeBtn) activeBtn.classList.add('ring-2', 'ring-emerald-500');
+
+            drawPresetBackground(type);
+            renderMainCanvas();
+        }
+
+        /**
+         * ユーザー画像のアップロード処理
+         */
+        function handleImageUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const img = new Image();
+                img.onload = function() {
+                    state.bgType = 'custom';
+                    document.querySelectorAll('.bg-preset-btn').forEach(btn => btn.classList.remove('ring-2', 'ring-emerald-500'));
+
+                    // アスペクト比を維持しつつキャンバス全体にカバー描画
+                    const scale = Math.max(CANVAS_W / img.width, CANVAS_H / img.height);
+                    const w = img.width * scale;
+                    const h = img.height * scale;
+                    const x = (CANVAS_W - w) / 2;
+                    const y = (CANVAS_H - h) / 2;
+
+                    bgCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+                    bgCtx.drawImage(img, x, y, w, h);
+                    renderMainCanvas();
+                    showToast('背景画像を読み込みました！');
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        /**
+         * ============================================================================
+         * レンダリングエンジン（メインキャンバス合成）
+         * ============================================================================
+         */
+        function renderMainCanvas(options = {}) {
+            const showOutline = options.forceNoOutline ? false : document.getElementById('toggle-outline').checked;
+            const highlightAnswer = options.highlightAnswer || false;
+
+            mainCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+
+            // 1. 背景を描画
+            mainCtx.drawImage(bgCanvas, 0, 0);
+
+            // 2. 人形レイヤーを描画（クリッピングマスクでシルエット内だけ描画）
+            mainCtx.save();
+            mainCtx.translate(state.doll.x, state.doll.y);
+            mainCtx.rotate(state.doll.angle);
+            mainCtx.scale(state.doll.scale, state.doll.scale);
+
+            // シルエットパスを作成してクリップ
+            traceDollPath(mainCtx, state.doll.pose);
+            mainCtx.save();
+            mainCtx.clip();
+
+            // ペイントされた人形テクスチャを描画
+            mainCtx.drawImage(dollCanvas, -DOLL_TEX_SIZE / 2, -DOLL_TEX_SIZE / 2);
+            mainCtx.restore();
+
+            // 輪郭ガイド線の描画（編集中の視認性確保）
+            if (showOutline && !highlightAnswer) {
+                mainCtx.strokeStyle = 'rgba(255, 255, 255, 0.85)';
+                mainCtx.lineWidth = 2.5 / state.doll.scale;
+                mainCtx.setLineDash([6 / state.doll.scale, 4 / state.doll.scale]);
+                mainCtx.stroke();
+
+                mainCtx.strokeStyle = 'rgba(15, 23, 42, 0.75)';
+                mainCtx.lineWidth = 1.5 / state.doll.scale;
+                mainCtx.lineDashOffset = 5 / state.doll.scale;
+                mainCtx.stroke();
+                mainCtx.setLineDash([]);
+            }
+
+            // 答え画像用のネオン発光ハイライト描画
+            if (highlightAnswer) {
+                mainCtx.shadowColor = '#ff0055';
+                mainCtx.shadowBlur = 22;
+                mainCtx.strokeStyle = '#ff1e56';
+                mainCtx.lineWidth = 6 / state.doll.scale;
+                mainCtx.stroke();
+
+                mainCtx.shadowBlur = 0;
+                mainCtx.strokeStyle = '#ffffff';
+                mainCtx.lineWidth = 2.5 / state.doll.scale;
+                mainCtx.stroke();
+            }
+
+            mainCtx.restore();
+
+            // 答え画像用：「ココ！」マーカー＆矢印描画
+            if (highlightAnswer) {
+                drawAnswerMarker(mainCtx, state.doll.x, state.doll.y, state.doll.scale);
+            }
+        }
+
+        /**
+         * 答え画像用の「ココ！」マーカーと集中サークルを描画
+         */
+        function drawAnswerMarker(ctx, x, y, scale) {
+            ctx.save();
+            const radius = Math.max(75, 110 * scale);
+
+            // 二重のターゲットリング
+            ctx.strokeStyle = '#ff1e56';
+            ctx.lineWidth = 6;
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.stroke();
+
+            ctx.strokeStyle = '#fde047';
+            ctx.lineWidth = 3;
+            ctx.setLineDash([12, 8]);
+            ctx.beginPath();
+            ctx.arc(x, y, radius + 10, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // 吹き出しラベル「ココにいた！」（画面端にはみ出さないよう位置調整）
+            const labelY = y - radius - 28 < 45 ? y + radius + 36 : y - radius - 22;
+            const labelX = Math.min(Math.max(x, 90), CANVAS_W - 90);
+
+            ctx.fillStyle = '#ff1e56';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.beginPath();
+            ctx.roundRect(labelX - 75, labelY - 22, 150, 40, 20);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 18px "M PLUS Rounded 1c", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('🎯 ココにいた！', labelX, labelY - 1);
+            ctx.restore();
+        }
+
+        /**
+         * ============================================================================
+         * インタラクション（マウス＆タッチ操作：移動・ペイント・スポイト）
+         * ============================================================================
+         */
+        function setupCanvasEvents() {
+            const getCanvasCoords = (e) => {
+                const rect = mainCanvas.getBoundingClientRect();
+                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return {
+                    x: (clientX - rect.left) * (CANVAS_W / rect.width),
+                    y: (clientY - rect.top) * (CANVAS_H / rect.height)
+                };
+            };
+
+            const onStart = (e) => {
+                if (e.cancelable) e.preventDefault();
+                const pos = getCanvasCoords(e);
+
+                if (state.mode === 'move') {
+                    // 人形のドラッグ移動開始
+                    state.isDragging = true;
+                    state.dragOffset = {
+                        x: pos.x - state.doll.x,
+                        y: pos.y - state.doll.y
+                    };
+                } else if (state.mode === 'paint') {
+                    if (state.brush.tool === 'eyedropper') {
+                        pickColorFromBackground(pos.x, pos.y, true);
+                    } else {
+                        saveUndoState();
+                        state.isPainting = true;
+                        state.lastPaintPos = screenToDollLocal(pos.x, pos.y);
+                        paintStrokeOnDoll(state.lastPaintPos, state.lastPaintPos);
+                        renderMainCanvas();
+                    }
+                }
+            };
+
+            const onMove = (e) => {
+                if (e.cancelable) e.preventDefault();
+                const pos = getCanvasCoords(e);
+
+                if (state.mode === 'move' && state.isDragging) {
+                    state.doll.x = Math.max(20, Math.min(CANVAS_W - 20, pos.x - state.dragOffset.x));
+                    state.doll.y = Math.max(20, Math.min(CANVAS_H - 20, pos.y - state.dragOffset.y));
+                    renderMainCanvas();
+                } else if (state.mode === 'paint') {
+                    if (state.brush.tool === 'eyedropper') {
+                        pickColorFromBackground(pos.x, pos.y, false);
+                    } else if (state.isPainting) {
+                        const localPos = screenToDollLocal(pos.x, pos.y);
+                        paintStrokeOnDoll(state.lastPaintPos, localPos);
+                        state.lastPaintPos = localPos;
+                        renderMainCanvas();
+                    }
+                }
+            };
+
+            const onEnd = () => {
+                if (state.isDragging) {
+                    state.isDragging = false;
+                }
+                if (state.isPainting) {
+                    state.isPainting = false;
+                    state.lastPaintPos = null;
+                }
+                if (state.mode === 'paint' && state.brush.tool === 'eyedropper') {
+                    // スポイト完了後、自動的にブラシに戻すと連続作業が超快適！
+                    setBrushTool('brush');
+                    showToast(`色を吸い取りました (${state.brush.color.toUpperCase()})`);
+                }
+            };
+
+            mainCanvas.addEventListener('mousedown', onStart);
+            window.addEventListener('mousemove', onMove);
+            window.addEventListener('mouseup', onEnd);
+
+            mainCanvas.addEventListener('touchstart', onStart, { passive: false });
+            mainCanvas.addEventListener('touchmove', onMove, { passive: false });
+            window.addEventListener('touchend', onEnd);
+        }
+
+        /**
+         * 画面座標(800x600)を人形テクスチャのローカル座標(320x320)へ逆変換
+         */
+        function screenToDollLocal(sx, sy) {
+            const dx = sx - state.doll.x;
+            const dy = sy - state.doll.y;
+            const cos = Math.cos(-state.doll.angle);
+            const sin = Math.sin(-state.doll.angle);
+            const rx = (dx * cos - dy * sin) / state.doll.scale;
+            const ry = (dx * sin + dy * cos) / state.doll.scale;
+            return {
+                x: rx + DOLL_TEX_SIZE / 2,
+                y: ry + DOLL_TEX_SIZE / 2
+            };
+        }
+
+        /**
+         * 人形テクスチャへのブラシストローク描画
+         */
+        function paintStrokeOnDoll(p1, p2) {
+            dollCtx.save();
+            dollCtx.lineCap = 'round';
+            dollCtx.lineJoin = 'round';
+            dollCtx.lineWidth = state.brush.size;
+
+            if (state.brush.tool === 'eraser') {
+                dollCtx.strokeStyle = '#ffffff';
+                dollCtx.globalAlpha = 1.0;
+                dollCtx.filter = 'none';
+            } else {
+                dollCtx.strokeStyle = state.brush.color;
+                dollCtx.globalAlpha = state.brush.alpha;
+                dollCtx.filter = state.brush.blur > 0 ? `blur(${state.brush.blur}px)` : 'none';
+            }
+
+            dollCtx.beginPath();
+            dollCtx.moveTo(p1.x, p1.y);
+            dollCtx.lineTo(p2.x, p2.y);
+            dollCtx.stroke();
+            dollCtx.restore();
+        }
+
+        /**
+         * 背景キャンバスからピクセル色を吸い取るスポイト機能
+         */
+        function pickColorFromBackground(x, y, addToHistory) {
+            const px = Math.max(0, Math.min(CANVAS_W - 1, Math.floor(x)));
+            const py = Math.max(0, Math.min(CANVAS_H - 1, Math.floor(y)));
+            const pixel = bgCtx.getImageData(px, py, 1, 1).data;
+            const hex = '#' + [pixel[0], pixel[1], pixel[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+
+            setBrushColor(hex, addToHistory);
+
+            // ルーペプレビュー更新
+            const preview = document.getElementById('eyedropper-preview');
+            preview.classList.remove('hidden');
+            document.getElementById('eyedropper-swatch').style.backgroundColor = hex;
+            document.getElementById('eyedropper-hex').textContent = hex.toUpperCase();
+        }
+
+        /**
+         * ============================================================================
+         * UIコントロール・モード切り替え
+         * ============================================================================
+         */
+        function setMode(mode) {
+            state.mode = mode;
+            const tabMove = document.getElementById('tab-move');
+            const tabPaint = document.getElementById('tab-paint');
+            const panelMove = document.getElementById('panel-move');
+            const panelPaint = document.getElementById('panel-paint');
+            const hintText = document.getElementById('canvas-hint-text');
+
+            if (mode === 'move') {
+                tabMove.className = 'flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition bg-emerald-500 text-white shadow';
+                tabPaint.className = 'flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition text-slate-600 hover:bg-slate-100';
+                panelMove.classList.remove('hidden');
+                panelPaint.classList.add('hidden');
+                hintText.textContent = '人形をドラッグして隠れる場所を決めよう！';
+                mainCanvas.style.cursor = 'grab';
+                document.getElementById('eyedropper-preview').classList.add('hidden');
+            } else {
+                tabPaint.className = 'flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition bg-amber-500 text-white shadow';
+                tabMove.className = 'flex-1 py-2.5 px-3 rounded-xl font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition text-slate-600 hover:bg-slate-100';
+                panelPaint.classList.remove('hidden');
+                panelMove.classList.add('hidden');
+                hintText.textContent = 'スポイトで背景の色を吸って人形を塗ろう！';
+                mainCanvas.style.cursor = 'crosshair';
+            }
+            renderMainCanvas();
+        }
+
+        function setDollPose(pose) {
+            state.doll.pose = pose;
+            document.querySelectorAll('.pose-btn').forEach(btn => {
+                btn.className = 'pose-btn bg-slate-100 text-slate-700 py-2 rounded-xl text-xs font-bold transition';
+            });
+            document.getElementById(`pose-${pose}`).className = 'pose-btn bg-emerald-500 text-white py-2 rounded-xl text-xs font-bold shadow-sm transition';
+            renderMainCanvas();
+        }
+
+        function updateTransformFromSliders() {
+            const scale = parseFloat(document.getElementById('slider-scale').value);
+            const deg = parseInt(document.getElementById('slider-angle').value, 10);
+            state.doll.scale = scale;
+            state.doll.angle = (deg * Math.PI) / 180;
+            document.getElementById('val-scale').textContent = `${Math.round(scale * 100)}%`;
+            document.getElementById('val-angle').textContent = `${deg}°`;
+            renderMainCanvas();
+        }
+
+        function resetDollTransform() {
+            state.doll.x = CANVAS_W / 2;
+            state.doll.y = CANVAS_H / 2;
+            state.doll.scale = 1.0;
+            state.doll.angle = 0;
+            document.getElementById('slider-scale').value = 1.0;
+            document.getElementById('slider-angle').value = 0;
+            updateTransformFromSliders();
+        }
+
+        function setBrushTool(tool) {
+            state.brush.tool = tool;
+            document.querySelectorAll('.brush-tool-btn').forEach(btn => {
+                btn.className = 'brush-tool-btn bg-slate-100 hover:bg-slate-200 text-slate-700 py-2.5 px-2 rounded-xl text-xs font-black flex flex-col items-center gap-1 transition border border-slate-200';
+            });
+            const active = document.getElementById(`tool-${tool}`);
+            if (tool === 'brush') {
+                active.className = 'brush-tool-btn bg-amber-500 text-white py-2.5 px-2 rounded-xl text-xs font-black shadow flex flex-col items-center gap-1 transition';
+                document.getElementById('eyedropper-preview').classList.add('hidden');
+            } else if (tool === 'eyedropper') {
+                active.className = 'brush-tool-btn bg-sky-500 text-white py-2.5 px-2 rounded-xl text-xs font-black shadow flex flex-col items-center gap-1 transition';
+                document.getElementById('eyedropper-preview').classList.remove('hidden');
+                showToast('背景の好きな場所をタップして色を吸おう！');
+            } else if (tool === 'eraser') {
+                active.className = 'brush-tool-btn bg-rose-500 text-white py-2.5 px-2 rounded-xl text-xs font-black shadow flex flex-col items-center gap-1 transition';
+                document.getElementById('eyedropper-preview').classList.add('hidden');
+            }
+        }
+
+        function setBrushColor(hex, addToHistory = true) {
+            state.brush.color = hex;
+            document.getElementById('color-picker').value = hex;
+            document.getElementById('current-color-hex').textContent = hex.toUpperCase();
+
+            if (addToHistory && !state.recentColors.includes(hex.toLowerCase())) {
+                state.recentColors.unshift(hex.toLowerCase());
+                if (state.recentColors.length > 10) state.recentColors.pop();
+                renderRecentColors();
+            }
+        }
+
+        function renderRecentColors() {
+            const container = document.getElementById('recent-colors');
+            container.innerHTML = '';
+            state.recentColors.forEach(col => {
+                const btn = document.createElement('button');
+                btn.className = 'w-6 h-6 rounded-full border-2 border-white shadow-sm hover:scale-110 transition';
+                btn.style.backgroundColor = col;
+                btn.onclick = () => {
+                    setBrushColor(col, false);
+                    if (state.brush.tool !== 'brush') setBrushTool('brush');
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function updateBrushSettings() {
+            state.brush.size = parseInt(document.getElementById('slider-brush-size').value, 10);
+            state.brush.alpha = parseInt(document.getElementById('slider-brush-alpha').value, 10) / 100;
+            state.brush.blur = parseInt(document.getElementById('slider-brush-blur').value, 10);
+
+            document.getElementById('val-brush-size').textContent = `${state.brush.size}px`;
+            document.getElementById('val-brush-alpha').textContent = `${Math.round(state.brush.alpha * 100)}%`;
+            document.getElementById('val-brush-blur').textContent = `${state.brush.blur}px`;
+        }
+
+        function saveUndoState() {
+            if (state.undoStack.length >= 15) state.undoStack.shift();
+            state.undoStack.push(dollCtx.getImageData(0, 0, DOLL_TEX_SIZE, DOLL_TEX_SIZE));
+            document.getElementById('btn-undo').disabled = false;
+        }
+
+        function undoPaint() {
+            if (state.undoStack.length <= 1) return;
+            state.undoStack.pop();
+            const prev = state.undoStack[state.undoStack.length - 1];
+            dollCtx.putImageData(prev, 0, 0);
+            renderMainCanvas();
+            showToast('1つ前の状態に戻しました');
+        }
+
+        function clearDollPaint() {
+            saveUndoState();
+            initDollCanvas();
+            renderMainCanvas();
+            showToast('人形を真っ白に戻しました');
+        }
+
+        /**
+         * ============================================================================
+         * 3. 「問題画像」と「答え画像」生成＆SNS共有ロジック
+         * ============================================================================
+         */
+        function generateResults() {
+            regenerateResultImages();
+            generateAnswerShareUrl();
+
+            document.getElementById('editor-view').classList.add('hidden');
+            document.getElementById('header-finish-btn').classList.add('hidden');
+            document.getElementById('result-view').classList.remove('hidden');
+            switchResultTab('question');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function backToEditor() {
+            document.getElementById('result-view').classList.add('hidden');
+            document.getElementById('editor-view').classList.remove('hidden');
+            document.getElementById('header-finish-btn').classList.remove('hidden');
+            renderMainCanvas();
+        }
+
+        function regenerateResultImages() {
+            const useFrame = document.getElementById('opt-frame').checked;
+
+            // ① 問題画像の生成（輪郭ガイドなし）
+            renderMainCanvas({ forceNoOutline: true, highlightAnswer: false });
+            state.questionDataUrl = exportFramedImage(mainCanvas, 'question', useFrame);
+
+            // ② 答え画像の生成（ネオン発光＋ココマーカー付き）
+            renderMainCanvas({ forceNoOutline: true, highlightAnswer: true });
+            state.answerDataUrl = exportFramedImage(mainCanvas, 'answer', useFrame);
+
+            // エディタ上の表示を元に戻す
+            renderMainCanvas();
+
+            // 現在選択中のタブ画像を更新
+            const previewImg = document.getElementById('result-preview-img');
+            previewImg.src = state.resultTab === 'question' ? state.questionDataUrl : state.answerDataUrl;
+        }
+
+        /**
+         * フレーム枠・タイトル帯を合成してDataURLを出力する
+         */
+        function exportFramedImage(sourceCanvas, type, useFrame) {
+            if (!useFrame) {
+                return sourceCanvas.toDataURL('image/png');
+            }
+
+            const out = document.createElement('canvas');
+            const pad = 20;
+            const headerH = 64;
+            const footerH = 38;
+            out.width = CANVAS_W + pad * 2;
+            out.height = CANVAS_H + headerH + footerH + pad;
+            const ctx = out.getContext('2d');
+
+            // 外枠背景
+            ctx.fillStyle = type === 'question' ? '#10b981' : '#f43f5e';
+            ctx.fillRect(0, 0, out.width, out.height);
+
+            // ヘッダーテキスト
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '900 28px "M PLUS Rounded 1c", sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            const title = type === 'question'
+                ? '🦎 この中に隠れたカメレオンを探せ！'
+                : '🎯 正解発表！カメレオンはココにいました！';
+            ctx.fillText(title, out.width / 2, headerH / 2 + 4);
+
+            // メイン画像描画
+            ctx.drawImage(sourceCanvas, pad, headerH);
+
+            // 画像内枠線
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(pad, headerH, CANVAS_W, CANVAS_H);
+
+            // フッター透かし
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            ctx.font = '700 16px "M PLUS Rounded 1c", sans-serif';
+            ctx.fillText('#カクレオンメーカー  #めちゃカメレオン', out.width / 2, headerH + CANVAS_H + (footerH + pad) / 2);
+
+            return out.toDataURL('image/png');
+        }
+
+        function switchResultTab(tab) {
+            state.resultTab = tab;
+            const btnQ = document.getElementById('res-tab-question');
+            const btnA = document.getElementById('res-tab-answer');
+            const previewImg = document.getElementById('result-preview-img');
+
+            if (tab === 'question') {
+                btnQ.className = 'flex-1 py-2.5 rounded-xl font-black text-xs sm:text-sm bg-emerald-500 text-white shadow transition flex items-center justify-center gap-2';
+                btnA.className = 'flex-1 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-600 hover:bg-white/60 transition flex items-center justify-center gap-2';
+                previewImg.src = state.questionDataUrl;
+            } else {
+                btnA.className = 'flex-1 py-2.5 rounded-xl font-black text-xs sm:text-sm bg-rose-500 text-white shadow transition flex items-center justify-center gap-2';
+                btnQ.className = 'flex-1 py-2.5 rounded-xl font-black text-xs sm:text-sm text-slate-600 hover:bg-white/60 transition flex items-center justify-center gap-2';
+                previewImg.src = state.answerDataUrl;
+            }
+        }
+
+        function downloadCurrentResultImage() {
+            const url = state.resultTab === 'question' ? state.questionDataUrl : state.answerDataUrl;
+            const filename = state.resultTab === 'question' ? 'kakureon_question.png' : 'kakureon_answer.png';
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            showToast('画像をダウンロードしました！');
+        }
+
+        async function copyCurrentResultImage() {
+            const url = state.resultTab === 'question' ? state.questionDataUrl : state.answerDataUrl;
+            try {
+                const res = await fetch(url);
+                const blob = await res.blob();
+                await navigator.clipboard.write([
+                    new ClipboardItem({ 'image/png': blob })
+                ]);
+                showToast('画像をクリップボードにコピーしました！Xで貼り付けできます');
+            } catch (err) {
+                showToast('このブラウザでは直接コピー非対応です。「保存」をご利用ください');
+            }
+        }
+
+        function shareToTwitter() {
+            const text = encodeURIComponent(
+                '🦎【問題】この画像の中に隠れたカクレオンを探せ！\n見つけられたらいいね＆リプで教えてね👀✨\n\n#カクレオンメーカー #めちゃカメレオン #かくれんぼ'
+            );
+            window.open(`https://twitter.com/intent/tweet?text=${text}`, '_blank');
+        }
+
+        /**
+         * ============================================================================
+         * 「答えはこちら」スポットライト発表URLの生成＆再生ロジック
+         * ============================================================================
+         */
+        function generateAnswerShareUrl() {
+            // 人形テクスチャを軽量な80x80に縮小してBase64化（URL長をコンパクトに保つ）
+            const miniCanvas = document.createElement('canvas');
+            miniCanvas.width = 80;
+            miniCanvas.height = 80;
+            miniCanvas.getContext('2d').drawImage(dollCanvas, 0, 0, 80, 80);
+
+            const payload = {
+                bg: state.bgType === 'custom' ? 'toys' : state.bgType, // カスタム画像の場合はプリセットへフォールバック
+                x: Math.round(state.doll.x),
+                y: Math.round(state.doll.y),
+                s: Number(state.doll.scale.toFixed(2)),
+                a: Number(state.doll.angle.toFixed(2)),
+                p: state.doll.pose,
+                tex: miniCanvas.toDataURL('image/webp', 0.6)
+            };
+
+            const encoded = btoa(encodeURIComponent(JSON.stringify(payload)));
+            const baseUrl = window.location.href.split('#')[0];
+            const fullUrl = `${baseUrl}#reveal=${encoded}`;
+
+            document.getElementById('answer-share-url').value = fullUrl;
+            const badge = document.getElementById('url-status-badge');
+            if (state.bgType === 'custom') {
+                badge.textContent = '※カスタム背景は標準背景で代用されます';
+            } else {
+                badge.textContent = '完全再現URL発行済';
+            }
+        }
+
+        function copyAnswerUrl() {
+            const input = document.getElementById('answer-share-url');
+            input.select();
+            document.execCommand('copy');
+            showToast('「答えはこちら」専用リンクをコピーしました！');
+        }
+
+        function previewAnswerRevealPage() {
+            const url = document.getElementById('answer-share-url').value;
+            const encoded = url.split('#reveal=')[1];
+            const decoded = JSON.parse(decodeURIComponent(atob(encoded)));
+            enterRevealMode(decoded);
+        }
+
+        function enterRevealMode(data) {
+            state.revealState.data = data;
+            state.revealState.active = false;
+            state.revealState.spotlightRadius = 0;
+
+            document.getElementById('editor-view').classList.add('hidden');
+            document.getElementById('result-view').classList.add('hidden');
+            document.getElementById('header-finish-btn').classList.add('hidden');
+            document.getElementById('reveal-view').classList.remove('hidden');
+
+            // 復元データから背景と人形を描画準備
+            drawPresetBackground(data.bg || 'toys');
+            const img = new Image();
+            img.onload = () => {
+                dollCtx.clearRect(0, 0, DOLL_TEX_SIZE, DOLL_TEX_SIZE);
+                dollCtx.drawImage(img, 0, 0, DOLL_TEX_SIZE, DOLL_TEX_SIZE);
+                renderRevealCanvas();
+            };
+            img.src = data.tex;
+        }
+
+        function renderRevealCanvas() {
+            const rCanvas = document.getElementById('reveal-canvas');
+            rCanvas.width = CANVAS_W;
+            rCanvas.height = CANVAS_H;
+            const rCtx = rCanvas.getContext('2d');
+            const d = state.revealState.data;
+            if (!d) return;
+
+            // 1. 通常のステージ＋隠れた人形を描画
+            rCtx.clearRect(0, 0, CANVAS_W, CANVAS_H);
+            rCtx.drawImage(bgCanvas, 0, 0);
+
+            rCtx.save();
+            rCtx.translate(d.x, d.y);
+            rCtx.rotate(d.a);
+            rCtx.scale(d.s, d.s);
+            traceDollPath(rCtx, d.p);
+            rCtx.save();
+            rCtx.clip();
+            rCtx.drawImage(dollCanvas, -DOLL_TEX_SIZE / 2, -DOLL_TEX_SIZE / 2);
+            rCtx.restore();
+            rCtx.restore();
+
+            // 2. スポットライト演出がONの場合
+            if (state.revealState.active) {
+                const rad = state.revealState.spotlightRadius;
+
+                // 周囲を暗転させ、正解位置だけスポットライトで照らす
+                rCtx.save();
+                rCtx.fillStyle = 'rgba(2, 6, 23, 0.78)';
+                rCtx.beginPath();
+                rCtx.rect(0, 0, CANVAS_W, CANVAS_H);
+                rCtx.arc(d.x, d.y, rad, 0, Math.PI * 2, true);
+                rCtx.fill();
+
+                // 人形の輪郭を発光させる
+                rCtx.translate(d.x, d.y);
+                rCtx.rotate(d.a);
+                rCtx.scale(d.s, d.s);
+                traceDollPath(rCtx, d.p);
+                rCtx.shadowColor = '#fde047';
+                rCtx.shadowBlur = 25;
+                rCtx.strokeStyle = '#fde047';
+                rCtx.lineWidth = 5 / d.s;
+                rCtx.stroke();
+                rCtx.restore();
+
+                // ココマーカー表示
+                if (rad >= 110) {
+                    drawAnswerMarker(rCtx, d.x, d.y, d.s);
+                }
+            }
+        }
+
+        function toggleSpotlightReveal() {
+            const btnText = document.getElementById('spotlight-btn-text');
+            const title = document.getElementById('reveal-title');
+
+            if (!state.revealState.active) {
+                state.revealState.active = true;
+                state.revealState.spotlightRadius = 450;
+                btnText.textContent = 'もう一度隠す';
+                title.textContent = '🎯 正解はココに隠れていました！';
+
+                // スポットライトがキュッと絞られるアニメーション
+                const animateSpotlight = () => {
+                    if (!state.revealState.active) return;
+                    if (state.revealState.spotlightRadius > 125) {
+                        state.revealState.spotlightRadius -= 18;
+                        renderRevealCanvas();
+                        requestAnimationFrame(animateSpotlight);
+                    } else {
+                        state.revealState.spotlightRadius = 125;
+                        renderRevealCanvas();
+                    }
+                };
+                animateSpotlight();
+            } else {
+                state.revealState.active = false;
+                btnText.textContent = 'スポットライトで答えを見る！';
+                title.textContent = 'どこに隠れているかわかるかな？';
+                renderRevealCanvas();
+            }
+        }
+
+        function exitRevealToCreate() {
+            history.replaceState(null, '', window.location.pathname);
+            document.getElementById('reveal-view').classList.add('hidden');
+            document.getElementById('editor-view').classList.remove('hidden');
+            document.getElementById('header-finish-btn').classList.remove('hidden');
+            initDollCanvas();
+            drawPresetBackground('toys');
+            renderMainCanvas();
+        }
+
+        function resetToEditor() {
+            if (!document.getElementById('reveal-view').classList.contains('hidden')) {
+                exitRevealToCreate();
+            } else {
+                backToEditor();
+            }
+        }
+
+        /**
+         * ============================================================================
+         * ユーティリティ（モーダル・トースト通知）
+         * ============================================================================
+         */
+        function openModal(id) {
+            document.getElementById(id).classList.remove('hidden');
+        }
+        function closeModal(id) {
+            document.getElementById(id).classList.add('hidden');
+        }
+
+        let toastTimer = null;
+        function showToast(msg) {
+            const toast = document.getElementById('toast');
+            document.getElementById('toast-msg').textContent = msg;
+            toast.classList.remove('opacity-0', 'translate-y-[-20px]');
+            toast.classList.add('opacity-100', 'translate-y-0');
+
+            clearTimeout(toastTimer);
+            toastTimer = setTimeout(() => {
+                toast.classList.remove('opacity-100', 'translate-y-0');
+                toast.classList.add('opacity-0', 'translate-y-[-20px]');
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
